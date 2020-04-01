@@ -26,6 +26,7 @@ Dependencies
 * numpy
 * pyserial
 * gobject (for GTK3)
+* pyvisa
 
 Supported GPIB Hardware
 =====
