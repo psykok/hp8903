@@ -8,9 +8,6 @@ from matplotlib.backends.backend_gtk3 import NavigationToolbar2GTK3 as Navigatio
 
 from datetime import datetime
 
-import serial
-import serial.tools.list_ports as list_ports
-
 import math
 import numpy as np
 import time
@@ -99,7 +96,6 @@ class HP8903BWindow(Gtk.Window):
         # Serial connection!
         self.ser = None
         self.gpib_dev = None
-        self.devices = list_ports.comports()
         
         # Menu Bar junk!
         action_group = Gtk.ActionGroup("my_actions")
@@ -150,9 +146,7 @@ class HP8903BWindow(Gtk.Window):
         gpib_label = Gtk.Label("GPIB Device: ")
         self.gpib_box.pack_start(gpib_label, False, False, 0)
 
-
-
-
+        # getting litst of availble GPIB devices
         rm = pyvisa.ResourceManager()
         devices = rm.list_resources()
 
@@ -163,6 +157,7 @@ class HP8903BWindow(Gtk.Window):
             if "GPIB" in g_dev: 
                n=n+1
                gpib_store.append([n,g_dev])
+
         self.gpib_combo = Gtk.ComboBox.new_with_model_and_entry(gpib_store)
         self.gpib_combo.set_entry_text_column(1)
         self.gpib_combo.set_active(0)
@@ -180,34 +175,37 @@ class HP8903BWindow(Gtk.Window):
 
         self.hbox.pack_start(bframe, False, False, 0)
 
-        con_hbox = Gtk.Box(spacing = 2)
         self.con_button = Gtk.Button(label = "Connect")
-
         self.con_button.connect("clicked", self.setup_gpib)
+        # if no GPIB devices are found the connect button is disabled 
         if n == 0:
            self.con_button.set_sensitive(False) 
-        con_hbox.pack_start(self.con_button, False, False, 0)
-
-        left_vbox.pack_start(con_hbox, False, False, 0)
+        left_vbox.pack_start(self.con_button, False, False, 0)
         
         device_store = Gtk.ListStore(int, str)
 
-        for i, dev in enumerate(self.devices):
-            device_store.append([i, dev[0]])
-        self.device_combo = Gtk.ComboBox.new_with_model_and_entry(device_store)
-        self.device_combo.set_entry_text_column(1)
-        self.device_combo.set_active(0)
 
         hsep0 = Gtk.HSeparator()
         left_vbox.pack_start(hsep0, False, False, 2)
-
+        
         # Measurement Selection
         mframe = Gtk.Frame(label = "Measurement Selection")
         meas_box = Gtk.Box(spacing = 2)
-        meas_vbox = Gtk.Box(spacing = 2)
+        meas_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing = 2)
 
         mframe.add(meas_box)
         meas_box.pack_start(meas_vbox, False, False, 0)
+
+        meas_entryf = Gtk.Frame(label = "Measurement Title")
+        meas_vbox.pack_start(meas_entryf, True, True, 0)
+        meas_entry = Gtk.Entry()
+        meas_entry.set_text("My Measurement")
+        meas_entryf.add(meas_entry)
+
+
+
+        meas_typef = Gtk.Frame(label = "Measurement Type")
+        meas_vbox.pack_start(meas_typef, True, True, 0)
 
         meas_store = Gtk.ListStore(int, str)
         meas_dict = {0: "THD+n",
@@ -222,8 +220,8 @@ class HP8903BWindow(Gtk.Window):
         self.meas_combo.set_active(0)
 
         self.meas_combo.connect("changed", self.meas_changed)
-        
-        meas_vbox.pack_start(self.meas_combo, False, False, 0)
+        meas_typef.add(self.meas_combo)
+        #meas_vbox.pack_start(self.meas_combo, False, False, 0)
         left_vbox.pack_start(mframe, False, False, 0)
 
 
@@ -536,112 +534,6 @@ class HP8903BWindow(Gtk.Window):
             print("Verify hardware setup and try to connect again")
             return(False)
 
-    def setup_gpib_old(self, button):
-        # Get GPIB info
-        gpib_model = self.gpib_combo.get_model()
-        model = self.device_combo.get_model()
-        print('MODEL:' + str(model))
-
-        gpib_tree_iter = self.gpib_combo.get_active_iter()
-
-        # Get address
-        #gpib_addr = self.gpib_addr.get_value_as_int()
-
-        # Instantiate GPIB Device class
-        self.gpib_dev = HP8903_GPIB_devices[gpib_model[gpib_tree_iter][0]][0](gpib_addr = gpib_addr)
-        print("Using GPIB Device: %s" % self.gpib_dev.name())
-        print("Using GPIB Address: %s" % str(gpib_addr))
-
-        if (not self.gpib_dev.implements_addr()):
-            print("Warning: this GPIB communication device does not implement")
-            print("    address setting, check your hardware's settings!")
-
-        # Get device info
-        model = self.device_combo.get_model()
-
-        tree_iter = self.device_combo.get_active_iter()
-
-        print("Device: %s" % model[tree_iter][1])
-        dev_name = model[tree_iter][1]
-
-        # Disable gpib and devices buttons
-        self.con_button.set_sensitive(False)
-        self.device_combo.set_sensitive(False)
-        self.gpib_combo.set_sensitive(False)
-        self.gpib_addr.set_sensitive(False)
-
-
-        if(not self.gpib_dev.open(dev_name)):
-            # Make into warning window?
-            print("Failed to open GPIB Device: %s at %s" % (self.gpib_dev.name(), dev_name))
-            print("Verify hardware setup and try to connect again")
-
-            self.con_button.set_sensitive(True)
-            self.device_combo.set_sensitive(True)
-            self.gpib_combo.set_sensitive(True)
-            self.gpib_addr.set_sensitive(True)
-
-            return(False)
-
-        # Do test?
-        if (not self.gpib_dev.test()):
-            print("GPIB device failed self test: %s at %s" % (self.gpib_dev.name(), dev_name))
-            print("Verify hardware setup and try to connect again")
-
-            self.con_button.set_sensitive(True)
-            self.device_combo.set_sensitive(True)
-            self.gpib_combo.set_sensitive(True)
-            self.gpib_addr.set_sensitive(True)
-
-            return(False)
-
-
-        if (self.gpib_dev.is_open()):
-            self.gpib_dev.flush_input()
-            # Initialize the HP 8903
-            status = self.init_hp8903()
-            if (not status):
-                print("Failed to initialize HP 8903")
-                print("Verify hardware setup and try to connect again")
-
-                self.gpib_dev.close()
-
-                self.con_button.set_sensitive(True)
-                self.device_combo.set_sensitive(True)
-                self.gpib_combo.set_sensitive(True)
-                self.gpib_addr.set_sensitive(True)
-
-                return(False)
-
-        else:
-            print("Failed to use GPIB device")
-            print("Verify hardware setup and try to connect again")
-
-            self.gpib_dev.close()
-
-            self.con_button.set_sensitive(True)
-            self.device_combo.set_sensitive(True)
-            self.gpib_combo.set_sensitive(True)
-            self.gpib_addr.set_sensitive(True)
-
-            return(False)
-
-        # Enable measurement controls
-        self.run_button.set_sensitive(True)
-        for w in self.measurement_widgets:
-            w.set_sensitive(True)
-        for w in self.freq_sweep_widgets:
-            w.set_sensitive(True)
-        for w in self.source_widgets:
-            w.set_sensitive(True)
-        for w in self.filter_widgets:
-            w.set_sensitive(True)
-        for w in self.vsweep_widgets:
-            w.set_sensitive(False)
-
-
-        self.status_bar.push(0, "Connected to  HP 8903, ready for measurements")
-
 
     def run_test(self, button):
         # Disable all control widgets during sweep
@@ -791,10 +683,9 @@ class HP8903BWindow(Gtk.Window):
         self.canvas.draw()
             
     def init_hp8903(self):
-        self.gpib_dev.flush_input()
         # Arbitrary but simple measurement to check device
         self.gpib_dev.write("FR1000.0HZAP0.100E+00VLM1LNL0LNT3")
-        status, meas = self.gpib_dev.read(msg_len = 12, timeout = 5000)
+        status, meas = self.gpib_dev.read()
 
         if (status):
             print(meas)
