@@ -55,6 +55,8 @@ HP8903_filters = ["30 kHz Low Pass",
                   "Left Plug-in Filter",
                   "Right Plug-in Filter"]
 
+colorlist= ['blue','red','orange','yellow','purple']
+
 class VISA_GPIB():
     def __init__(self,mydevice):
         self.rm = None
@@ -92,11 +94,13 @@ class VISA_GPIB():
 class HP8903BWindow(Gtk.Window):
     def __init__(self):
         Gtk.Window.__init__(self, title="HP 8903B Control")
-
         # Serial connection!
         self.ser = None
         self.gpib_dev = None
         
+        # set default colot
+        self.plot_color = 'blue'
+
         # Menu Bar junk!
         action_group = Gtk.ActionGroup("my_actions")
         action_filemenu = Gtk.Action("FileMenu", "File", None, None)
@@ -201,8 +205,6 @@ class HP8903BWindow(Gtk.Window):
         meas_entry = Gtk.Entry()
         meas_entry.set_text("My Measurement")
         meas_entryf.add(meas_entry)
-
-
 
         meas_typef = Gtk.Frame(label = "Measurement Type")
         meas_vbox.pack_start(meas_typef, True, True, 0)
@@ -419,8 +421,12 @@ class HP8903BWindow(Gtk.Window):
         filterf = Gtk.Frame(label = "Filters")
         filterb = Gtk.Box(spacing = 2)
         filtervb = Gtk.Box(spacing = 2, orientation = 'vertical')
+        filtervb2 = Gtk.Box(spacing = 2, orientation = 'vertical')
         filterf.add(filterb)
         filterb.pack_start(filtervb, False, False, 0)
+        filterb.pack_start(filtervb2, False, False, 0)
+
+
 
         self.f30k = Gtk.CheckButton("30 kHz LP")
         self.f80k = Gtk.CheckButton("80 kHz LP")
@@ -436,14 +442,41 @@ class HP8903BWindow(Gtk.Window):
         
         filtervb.pack_start(self.f30k, False, False, 0)
         filtervb.pack_start(self.f80k, False, False, 0)
-        filtervb.pack_start(self.lpi, False, False, 0)
-        filtervb.pack_start(self.rpi, False, False, 0)
+        filtervb2.pack_start(self.lpi, False, False, 0)
+        filtervb2.pack_start(self.rpi, False, False, 0)
 
         left_vbox.pack_start(filterf, False, False, 0)
         
         hsep = Gtk.HSeparator()
         left_vbox.pack_start(hsep, False, False, 2)
         
+        plot_numberf = Gtk.Frame(label = "PLot Numer")
+        left_vbox.pack_start(plot_numberf, True, True, 0)
+
+        self.radio_vbox = Gtk.Box(spacing = 2)
+        plot_numberf.add(self.radio_vbox)
+
+        button1 = Gtk.RadioButton.new_with_label_from_widget(None, "1")
+        button1.connect("toggled", self.on_button_toggled, "1")
+        self.radio_vbox.pack_start(button1, False, False, 0)
+        button2 = Gtk.RadioButton.new_from_widget(button1)
+        button2.set_label("2")
+        button2.connect("toggled", self.on_button_toggled, "2")
+        self.radio_vbox.pack_start(button2, False, False, 0)
+        button3 = Gtk.RadioButton.new_from_widget(button2)
+        button3.set_label("3")
+        button3.connect("toggled", self.on_button_toggled, "3")
+        self.radio_vbox.pack_start(button3, False, False, 0)
+        button4 = Gtk.RadioButton.new_from_widget(button3)
+        button4.set_label("4")
+        button4.connect("toggled", self.on_button_toggled, "4")
+        self.radio_vbox.pack_start(button4, False, False, 0)
+        button5 = Gtk.RadioButton.new_from_widget(button4)
+        button5.set_label("5")
+        button5.connect("toggled", self.on_button_toggled, "5")
+        self.radio_vbox.pack_start(button5, False, False, 0)
+
+
         self.run_button = Gtk.Button(label = "Start Sequence")
         self.run_button.set_sensitive(False)
         left_vbox.pack_start(self.run_button, False, False, 0)
@@ -495,6 +528,14 @@ class HP8903BWindow(Gtk.Window):
         self.units_string = "%"
         self.measurements = None
 
+    def on_button_toggled(self, button, name):
+        #colorlist= ['blue','red','orange','yellow','purple']
+        if button.get_active():
+            state = "on"
+            self.plot_color=colorlist[int(name)-1]
+        else:
+            state = "off"
+        print("Button", name, "was turned", state)
 
 
 
@@ -536,6 +577,7 @@ class HP8903BWindow(Gtk.Window):
 
 
     def run_test(self, button):
+        print("selected color : " + self.plot_color)
         # Disable all control widgets during sweep
         self.run_button.set_sensitive(False)
         self.action_filesave.set_sensitive(False)
@@ -625,8 +667,11 @@ class HP8903BWindow(Gtk.Window):
                 meas_point = self.send_measurement(meas, units, i, amp, filters)
                 self.x.append(float(i))
                 self.y.append(float(meas_point))
-                print(float(meas_point))
+
+                #print x and y
+                print(str(i) + ',' + str(float(meas_point)))
                 self.update_plot(self.x, self.y)
+
                 # plot new measures
                 #print(meas_point)
         elif (meas == 4):
@@ -660,18 +705,17 @@ class HP8903BWindow(Gtk.Window):
         self.action_filesave.set_sensitive(True)
 
     def update_plot(self, x, y):
-        if (len(self.plt) < 1):
-            self.plt = self.a.plot(x, y, marker = 'x')
+        #print("ploter selected color : " + self.plot_color)
+        #if (len(self.plt) < 1):
+        self.plt = self.a.plot(x, y, color=self.plot_color,marker = 'o')
         self.plt[0].set_data(x, y)
         ymin = min(y)
         ymax = max(y)
-
         
         # if (ymin == 0.0):
         #     ymin = -0.01
         # if (ymax == 0.0):
         #     ymax = 0.01
-
         sep = abs(ymax - ymin)
         sep = sep/10.0
 
@@ -936,6 +980,7 @@ class HP8903BWindow(Gtk.Window):
 
 if __name__ == '__main__':
     win = HP8903BWindow()
+    win.set_default_size(1600, 600)
     win.connect("delete-event", Gtk.main_quit)
     win.show_all()
     Gtk.main()
