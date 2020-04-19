@@ -5,6 +5,7 @@ from gi.repository import Gtk, GObject
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_gtk3cairo import FigureCanvasGTK3Cairo as FigureCanvas
 from matplotlib.backends.backend_gtk3 import NavigationToolbar2GTK3 as NavigationToolbar
+import matplotlib.patches as mpatches
 
 from datetime import datetime
 
@@ -12,6 +13,8 @@ import math
 import numpy as np
 import time
 from datetime import datetime
+
+from numpy import random
 
 import pyvisa
 import string
@@ -76,10 +79,10 @@ class VISA_GPIB():
 
     def read(self):
         output = self.inst.read_bytes(40)
-
         for line in output.split("\r\n"):
             if len(line) >= 10:
                 result = line
+        print(result)
         return (True,result)
 
     def test(self):
@@ -140,6 +143,12 @@ class HP8903BWindow(Gtk.Window):
         self.box = Gtk.Box(spacing = 2)
 
         bframe.add(left_vbox)
+
+        self.demo = Gtk.CheckButton("Demo Mode")
+        self.demo.connect("toggled", self.demo_callback)
+
+        left_vbox.pack_start(self.demo, False, False, 0)
+
 
         # GPIB device selector
         gpib_frame = Gtk.Frame(label = "GPIB Communication Device")
@@ -202,20 +211,20 @@ class HP8903BWindow(Gtk.Window):
 
         meas_entryf = Gtk.Frame(label = "Measurement Title")
         meas_vbox.pack_start(meas_entryf, True, True, 0)
-        meas_entry = Gtk.Entry()
-        meas_entry.set_text("My Measurement")
-        meas_entryf.add(meas_entry)
+        self.meas_entry = Gtk.Entry()
+        self.meas_entry.set_text("My Measurement")
+        meas_entryf.add(self.meas_entry)
 
         meas_typef = Gtk.Frame(label = "Measurement Type")
         meas_vbox.pack_start(meas_typef, True, True, 0)
 
         meas_store = Gtk.ListStore(int, str)
-        meas_dict = {0: "THD+n",
+        self.meas_dict = {0: "THD+n",
                      1:"Frequency Response",
                      2: "THD+n (Ratio)",
                      3: "Frequency Response (Ratio)",
                      4: "Ouput Level"}
-        for k, v in meas_dict.iteritems():
+        for k, v in self.meas_dict.iteritems():
             meas_store.append([k, v])
         self.meas_combo = Gtk.ComboBox.new_with_model_and_entry(meas_store)
         self.meas_combo.set_entry_text_column(1)
@@ -491,6 +500,7 @@ class HP8903BWindow(Gtk.Window):
         self.a.set_xscale('log')
         self.a.set_xlim((10.0, 30000.0))
         self.a.set_ylim((0.0005, 0.01))
+        self.a.set_title(self.meas_entry.get_text())
         self.a.set_xlabel("Frequency (Hz)")
         self.a.set_ylabel("THD+n (%)")
         
@@ -504,7 +514,7 @@ class HP8903BWindow(Gtk.Window):
         
         #self.hbox.pack_start(self.canvas, True, True, 0)
         self.hbox.pack_start(plot_vbox, True, True, 0)
-
+        self.hbox.hide()
         # Groups of widgets
         self.measurement_widgets = [self.meas_combo, self.units_combo]
         self.freq_sweep_widgets = [self.start_freq, self.stop_freq, self.steps]
@@ -522,7 +532,6 @@ class HP8903BWindow(Gtk.Window):
             w.set_sensitive(False)
         for w in self.vsweep_widgets:
             w.set_sensitive(False)
-
         
         self.meas_string = "THD+n (%)"
         self.units_string = "%"
@@ -535,7 +544,7 @@ class HP8903BWindow(Gtk.Window):
             self.plot_color=colorlist[int(name)-1]
         else:
             state = "off"
-        print("Button", name, "was turned", state)
+        #print("Button", name, "was turned", state)
 
 
 
@@ -553,31 +562,19 @@ class HP8903BWindow(Gtk.Window):
            self.gpib_dev.open()
            print(self.gpib_dev.read()) 
 
-
-
            # Enable measurement controls
-           self.run_button.set_sensitive(True)
-           for w in self.measurement_widgets:
-               w.set_sensitive(True)
-           for w in self.freq_sweep_widgets:
-               w.set_sensitive(True)
-           for w in self.source_widgets:
-               w.set_sensitive(True)
-           for w in self.filter_widgets:
-               w.set_sensitive(True)
-           for w in self.vsweep_widgets:
-               w.set_sensitive(False)
-
+           self.activate_panel()
 
            self.status_bar.push(0, "Connected to  HP 8903, ready for measurements")
         else:
-	    print("Failed to use GPIB device")
+            print("Failed to use GPIB device")
             print("Verify hardware setup and try to connect again")
             return(False)
 
 
     def run_test(self, button):
         print("selected color : " + self.plot_color)
+
         # Disable all control widgets during sweep
         self.run_button.set_sensitive(False)
         self.action_filesave.set_sensitive(False)
@@ -621,6 +618,12 @@ class HP8903BWindow(Gtk.Window):
         meas = self.meas_combo.get_active()
         units = self.units_combo.get_active()
 
+        self.a.set_title(self.meas_entry.get_text())
+        
+        # display legend
+        #plot_patch = mpatches.Patch(color=self.plot_color, label=self.meas_dict[meas])
+        #self.a.legend(handles=[plot_patch])
+
         lsteps = []
         vsteps = []
         if ((meas < 4) and (meas >= 0)):
@@ -663,7 +666,9 @@ class HP8903BWindow(Gtk.Window):
             pt = self.send_measurement(meas, units, center_freq, start_amp, filters, ratio = 2)
 
         if ((meas < 4) and (meas >= 0)):
+            leg = 0
             for i in lsteps:
+                #print(str(meas) + ',' + str(units) + ',' + str(i) + ',' + str(amp) + ',' + str(filters))
                 meas_point = self.send_measurement(meas, units, i, amp, filters)
                 self.x.append(float(i))
                 self.y.append(float(meas_point))
@@ -682,7 +687,6 @@ class HP8903BWindow(Gtk.Window):
                 self.y.append(float(meas_point))
                 print("in: %f, out %f" % (v, float(meas_point)))
                 self.update_plot(self.x, self.y)
-        
 
         for w in self.measurement_widgets:
             w.set_sensitive(True)
@@ -700,14 +704,14 @@ class HP8903BWindow(Gtk.Window):
 
         if (meas > 1):
             self.freq.set_sensitive(True)
-
+        
         self.run_button.set_sensitive(True)
         self.action_filesave.set_sensitive(True)
 
     def update_plot(self, x, y):
         #print("ploter selected color : " + self.plot_color)
         #if (len(self.plt) < 1):
-        self.plt = self.a.plot(x, y, color=self.plot_color,marker = 'o')
+        self.plt = self.a.plot(x, y, color=self.plot_color,marker = 'o',label=self.plot_color)
         self.plt[0].set_data(x, y)
         ymin = min(y)
         ymax = max(y)
@@ -789,20 +793,26 @@ class HP8903BWindow(Gtk.Window):
 
         # Send and read measurement via GPIB controller
         
-
-        self.gpib_dev.write(payload)
-        status, samp = self.gpib_dev.read()
-        if (status):
-            sampf = float(samp)
+        if self.demo.get_active() :
+            samp = random.randint(1, 10)
         else:
-            sampf = np.NAN
-            print("Failed to get sample")
+            self.gpib_dev.write(payload)
 
-        if (sampf > 4.0e9):
-            print(("Error: %s" % samp[4:6]) + " " + HP8903_errors[int(samp[4:6])])
-            samp = np.NAN
+            # sleep is needed to fixe communication issues
+            time.sleep(0.5)
 
-        self.status_bar.push(0, "Freq: %f, Amp: %f, Return: %f,    GPIB: %s" % (freq, amp, sampf, payload))
+            status, samp = self.gpib_dev.read()
+            if (status):
+                sampf = float(samp)
+            else:
+                sampf = np.NAN
+                print("Failed to get sample")
+
+            if (sampf > 4.0e9):
+                print(("Error: %s" % samp[4:6]) + " " + HP8903_errors[int(samp[4:6])])
+                samp = np.NAN
+
+            self.status_bar.push(0, "Freq: %f, Amp: %f, Return: %f,    GPIB: %s" % (freq, amp, sampf, payload))
             
         return(samp)
 
@@ -823,8 +833,22 @@ class HP8903BWindow(Gtk.Window):
         n = np.array([np.array(self.x), np.array(self.y)])
         np.savetxt(fid, n.transpose(), fmt = ["%f", "%f"])
         fid.close()
-        
-        
+
+
+    def activate_panel(self):
+        # Enable measurement controls
+        self.run_button.set_sensitive(True)
+        for w in self.measurement_widgets:
+            w.set_sensitive(True)
+        for w in self.freq_sweep_widgets:
+            w.set_sensitive(True)
+        for w in self.source_widgets:
+            w.set_sensitive(True)
+        for w in self.filter_widgets:
+            w.set_sensitive(True)
+        for w in self.vsweep_widgets:
+            w.set_sensitive(False)
+
     def freq_callback(self, spinb):
         if (self.start_freq.get_value() > self.stop_freq.get_value()):
             self.start_freq.set_value(self.stop_freq.get_value())
@@ -832,6 +856,11 @@ class HP8903BWindow(Gtk.Window):
     def volt_callback(self, spinb):
         if (self.start_v.get_value() > self.stop_v.get_value()):
             self.start_v.set_value(self.stop_v.get_value())
+
+    # demo mode toggle
+    def demo_callback(self, cb):
+        if (cb.get_active()):
+           self.activate_panel()
 
     # 30k/80k toggle
     def filter1_callback(self, cb):
